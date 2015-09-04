@@ -48,9 +48,9 @@ void *writer(void *p) {
     while(!stop) {
         a = counter;
         // asm volatile ("" ::: "memory");
-        asm volatile ("" ::: "memory");
+        asm volatile ("mfence" ::: "memory");
         b = counter;
-        asm volatile ("" ::: "memory");
+        asm volatile ("mfence" ::: "memory");
 
         counter++;
     }
