@@ -2,13 +2,23 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#include <list>
+
+using namespace std;
+
+
 /* typedef unsigned int uint; */
 typedef unsigned long int uint64_t;
 
-volatile uint64_t flag = 0;
-volatile uint64_t data = 0;
+static uint64_t flag = 0;
+
+char x[2048];
+
+static uint64_t data = 0;
 
 volatile bool stop = false;
+
+list<uint64_t> diffs;
 
 void *reader(void *p) {
     uint64_t iter_counter = 0;
@@ -16,19 +26,31 @@ void *reader(void *p) {
 
     uint64_t cnt_le = 0, cnt_gt = 0;
 
-    uint64_t _flag = 0;
-    uint64_t _data = 0;
+    volatile uint64_t _flag = 0;
+    volatile uint64_t _data = 0;
 
     while(!stop) {
         iter_counter++;
 
-        uint64_t tmp_flag = __sync_val_compare_and_swap(&flag, _flag, flag);
+        asm volatile ("mfence" ::: "memory");
+        asm volatile ("" ::: "memory");
+        __sync_synchronize();
+        /* __builtin_prefetch(&flag); */
+
+        volatile uint64_t tmp_flag = flag;
 
         if( tmp_flag != _flag ) {
-          uint64_t tmp_data = data;
+
+          asm volatile ("mfence" ::: "memory");
+          asm volatile ("" ::: "memory");
+          __sync_synchronize();
+          /* __builtin_prefetch(&data); */
+
+          volatile uint64_t tmp_data = data;
 
           if(tmp_data <= _data) {
             cnt_le++;
+            diffs.push_back(tmp_flag - _flag);
           }
           else {
             /* Right */
@@ -42,6 +64,11 @@ void *reader(void *p) {
 
     printf("iters=%llu, less=%llu, more=%llu\n", iter_counter, cnt_le, cnt_gt);
 
+    for(auto d:diffs) {
+      printf("%llu ", d);
+    }
+    printf("\n");
+
     return NULL;
 }
 
@@ -51,20 +78,24 @@ void *writer(void *p) {
     volatile uint64_t overflows = 0;
     while(!stop) {
 
-        /* data = counter; */
-        __sync_fetch_and_add(&data,1);
+        data++;
         asm volatile ("mfence" ::: "memory");
+        asm volatile ("" ::: "memory");
+        __sync_synchronize();
+        /* __builtin_prefetch; */
 
-        __sync_fetch_and_add(&flag,1);
-        /* flag = counter; */
+        flag++;
         asm volatile ("mfence" ::: "memory");
+        asm volatile ("" ::: "memory");
+        __sync_synchronize();
+        /* __builtin_prefetch; */
 
         counter++;
         if(counter == (uint64_t)(-1))
           overflows++;
     }
 
-    printf("overflows=%llu\n", overflows);
+    printf("counter=%llu overflows=%llu\n", counter, overflows);
 }
 
 int main() {

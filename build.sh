@@ -1,3 +1,3 @@
 #!/bin/sh
 set -x -e
-gcc test.cpp  -O0 -o test -lpthread
+g++ test.cpp -march=native -std=gnu++11 -O2 -o test -lpthread
